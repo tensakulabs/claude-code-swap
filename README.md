@@ -1,4 +1,4 @@
-# claude-swap (`ccs`)
+# claude-code-swap (`ccs`)
 
 > Switch Claude Code provider profiles with one command.
 
