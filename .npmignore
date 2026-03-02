@@ -1,0 +1,12 @@
+# Python source — not needed in npm package
+src/
+tests/
+pyproject.toml
+install.sh
+*.py
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+.github/
+.gitignore

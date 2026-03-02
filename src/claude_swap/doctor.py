@@ -64,15 +64,15 @@ def check_config_parseable() -> CheckResult:
 def check_config_dir_permissions() -> CheckResult:
     if not CONFIG_DIR.exists():
         return CheckResult(
-            "~/.claude-swap/ permissions", "warn", "Directory not found"
+            "~/.claude-code-swap/ permissions", "warn", "Directory not found"
         )
     mode = stat.S_IMODE(CONFIG_DIR.stat().st_mode)
     if mode == 0o700:
-        return CheckResult("~/.claude-swap/ permissions", "ok", "0700")
+        return CheckResult("~/.claude-code-swap/ permissions", "ok", "0700")
     return CheckResult(
-        "~/.claude-swap/ permissions",
+        "~/.claude-code-swap/ permissions",
         "warn",
-        f"Expected 0700, got {oct(mode)}. Fix: chmod 700 ~/.claude-swap/",
+        f"Expected 0700, got {oct(mode)}. Fix: chmod 700 ~/.claude-code-swap/",
     )
 
 

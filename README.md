@@ -11,15 +11,19 @@ Claude Code is locked to Anthropic models by default. `ccs` (Claude Code Switch)
 ## Install
 
 ```bash
-pip install claude-swap
+# If you're already in the npm ecosystem (Claude Code users):
+npm install -g @tensakulabs/ccs
+
+# Or via pip/pipx:
+pip install claude-code-swap
 # or
-pipx install claude-swap
+pipx install claude-code-swap
 ```
 
 Single-line install:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/tensakulabs/claude-swap/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/tensakulabs/claude-code-swap/main/install.sh | bash
 ```
 
 ---
@@ -75,9 +79,9 @@ ccs --version
 
 ## How It Works
 
-`ccs` stores your profiles in `~/.claude-swap/config.yaml`. When you run `ccs`, it:
+`ccs` stores your profiles in `~/.claude-code-swap/config.yaml`. When you run `ccs`, it:
 
-1. Reads the active profile from `~/.claude-swap/state.yaml`
+1. Reads the active profile from `~/.claude-code-swap/state.yaml`
 2. Resolves any `${ENV_VAR}` references from your shell environment
 3. Constructs the appropriate `ANTHROPIC_*` environment variables
 4. Calls `os.execvpe("claude", ...)` — **replacing its own process** with Claude Code
@@ -88,7 +92,7 @@ No proxy. No subprocess. No added latency. After exec, `ccs` is completely out o
 
 ## Configuration
 
-**`~/.claude-swap/config.yaml`** — your profiles:
+**`~/.claude-code-swap/config.yaml`** — your profiles:
 
 ```yaml
 profiles:
@@ -121,7 +125,7 @@ profiles:
       opus: gemini-2.5-pro
 ```
 
-**`~/.claude-swap/state.yaml`** — active profile (written by `ccs use`):
+**`~/.claude-code-swap/state.yaml`** — active profile (written by `ccs use`):
 
 ```yaml
 active: ollama
@@ -164,7 +168,7 @@ The `default` profile sets none of these — Claude Code runs with your existing
 ## Security
 
 - **Never hardcode API keys** — always use `${ENV_VAR}` references. `ccs` warns you if it detects a key-like string in your config.
-- `~/.claude-swap/` is created with `0700`, files with `0600`.
+- `~/.claude-code-swap/` is created with `0700`, files with `0600`.
 - `ccs` makes **no network calls** during normal launch — only during `ccs test`.
 - State file contains only a profile name, no secrets.
 

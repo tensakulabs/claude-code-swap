@@ -125,7 +125,7 @@ def test_check_config_dir_permissions_missing(monkeypatch, tmp_path):
 
 
 def test_check_config_dir_permissions_correct(monkeypatch, tmp_path):
-    d = tmp_path / "claude-swap"
+    d = tmp_path / "claude-code-swap"
     d.mkdir(mode=0o700)
     _patch_doctor(monkeypatch, tmp_path)
     monkeypatch.setattr("claude_swap.doctor.CONFIG_DIR", d)

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Installing claude-swap..."
+echo "Installing claude-code-swap..."
 
 # Prefer pipx for isolation, fall back to pip --user
 if command -v pipx &>/dev/null; then
-    pipx install claude-swap
+    pipx install claude-code-swap
     echo ""
     echo "Installed via pipx."
     echo "Run: ccs --version"
 else
-    pip install --user claude-swap
+    pip install --user claude-code-swap
     echo ""
     echo "Installed via pip."
     echo ""

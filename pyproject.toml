@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "claude-swap"
+name = "claude-code-swap"
 version = "0.1.0"
 description = "Switch Claude Code provider profiles with one command"
 readme = "README.md"
@@ -36,8 +36,8 @@ dev = [
 ccs = "claude_swap.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/tensakulabs/claude-swap"
-Issues = "https://github.com/tensakulabs/claude-swap/issues"
+Homepage = "https://github.com/tensakulabs/claude-code-swap"
+Issues = "https://github.com/tensakulabs/claude-code-swap/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/claude_swap"]

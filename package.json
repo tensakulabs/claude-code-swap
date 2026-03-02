@@ -1,0 +1,36 @@
+{
+  "name": "@tensakulabs/ccs",
+  "version": "0.1.0",
+  "description": "Switch Claude Code provider profiles with one command (Ollama, OpenRouter, Gemini, OpenAI)",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "llm",
+    "provider",
+    "ollama",
+    "openrouter",
+    "cli"
+  ],
+  "homepage": "https://github.com/tensakulabs/claude-code-swap",
+  "bugs": {
+    "url": "https://github.com/tensakulabs/claude-code-swap/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tensakulabs/claude-code-swap.git"
+  },
+  "license": "MIT",
+  "author": "Justin Tieu <justin@tensakulabs.com>",
+  "bin": {
+    "ccs": "bin/ccs.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
+}

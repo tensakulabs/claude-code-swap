@@ -457,7 +457,7 @@ def test_doctor_runs_without_error(monkeypatch, tmp_path, capsys):
 
     run_doctor()
     captured = capsys.readouterr()
-    assert "claude-swap" in captured.out
+    assert "claude-code-swap" in captured.out
     assert "[OK]" in captured.out or "[WARN]" in captured.out or "[FAIL]" in captured.out
 
 

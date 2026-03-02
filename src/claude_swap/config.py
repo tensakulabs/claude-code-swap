@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-CONFIG_DIR = Path.home() / ".claude-swap"
+CONFIG_DIR = Path.home() / ".claude-code-swap"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
 _KEY_PATTERN = re.compile(r"\b(sk|or)-[A-Za-z0-9]{20,}\b")
@@ -18,7 +18,7 @@ _ENV_REF_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
 
 def ensure_config_dir() -> None:
-    """Create ~/.claude-swap/ with mode 0700."""
+    """Create ~/.claude-code-swap/ with mode 0700."""
     CONFIG_DIR.mkdir(mode=0o700, exist_ok=True)
 
 
