@@ -35,8 +35,10 @@ def load_config() -> dict:
     return data
 
 
-def save_config(config: dict, path: Path = CONFIG_FILE) -> None:
+def save_config(config: dict, path: Path | None = None) -> None:
     """Atomically write config.yaml with mode 0600."""
+    if path is None:
+        path = CONFIG_FILE
     ensure_config_dir()
     tmp = path.with_suffix(".yaml.tmp")
     content = yaml.dump(
