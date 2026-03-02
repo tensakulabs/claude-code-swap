@@ -75,3 +75,16 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  bump-homebrew:
+    name: Bump Homebrew formula
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Bump formula in tensakulabs/homebrew-tap
+        uses: dawidd6/action-homebrew-bump-formula@v3
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          tap: tensakulabs/homebrew-tap
+          formula: claude-code-swap

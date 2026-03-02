@@ -11,12 +11,14 @@ Claude Code is locked to Anthropic models by default. `ccs` (Claude Code Switch)
 ## Install
 
 ```bash
-# If you're already in the npm ecosystem (Claude Code users):
+# npm (recommended for Claude Code users):
 npm install -g @tensakulabs/ccs
 
-# Or via pip/pipx:
+# Homebrew:
+brew install tensakulabs/tap/claude-code-swap
+
+# pip / pipx:
 pip install claude-code-swap
-# or
 pipx install claude-code-swap
 ```
 
