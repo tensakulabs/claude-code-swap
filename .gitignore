@@ -33,6 +33,9 @@ coverage.xml
 *.yaml.bak
 *.yaml.tmp
 
+# Rust
+target/
+
 # macOS
 .DS_Store
 
