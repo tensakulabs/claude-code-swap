@@ -1,6 +1,6 @@
 {
   "name": "@tensakulabs/ccs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Switch Claude Code provider profiles with one command (Ollama, OpenRouter, Gemini, OpenAI)",
   "keywords": [
     "claude",
