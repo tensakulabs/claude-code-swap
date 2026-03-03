@@ -11,22 +11,17 @@ Claude Code is locked to Anthropic models by default. `ccs` (Claude Code Switch)
 ## Install
 
 ```bash
-# npm (recommended for Claude Code users):
-npm install -g @tensakulabs/ccs
+# Cargo (recommended):
+cargo install claude-code-swap
 
 # Homebrew:
 brew install tensakulabs/tap/claude-code-swap
 
-# pip / pipx:
-pip install claude-code-swap
-pipx install claude-code-swap
+# npm (shim — requires the binary on PATH):
+npm install -g @tensakulabs/ccs
 ```
 
-Single-line install:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/tensakulabs/claude-code-swap/main/install.sh | bash
-```
+Or download a pre-built binary from [Releases](https://github.com/tensakulabs/claude-code-swap/releases).
 
 ---
 
@@ -86,7 +81,7 @@ ccs --version
 1. Reads the active profile from `~/.claude-code-swap/state.yaml`
 2. Resolves any `${ENV_VAR}` references from your shell environment
 3. Constructs the appropriate `ANTHROPIC_*` environment variables
-4. Calls `os.execvpe("claude", ...)` — **replacing its own process** with Claude Code
+4. Execs `claude` — **replacing its own process** with Claude Code
 
 No proxy. No subprocess. No added latency. After exec, `ccs` is completely out of the picture.
 
@@ -178,8 +173,6 @@ The `default` profile sets none of these — Claude Code runs with your existing
 
 ## Requirements
 
-- Python 3.10+
-- PyYAML 6.0+
 - Claude Code (`npm install -g @anthropic-ai/claude-code`)
 
 ---

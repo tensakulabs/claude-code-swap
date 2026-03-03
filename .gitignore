@@ -1,40 +1,9 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
-.cache/
-.mypy_cache/
-.ruff_cache/
-
-# Virtual environments
-.venv/
-venv/
-env/
-.env
-
-# Testing
-.pytest_cache/
-htmlcov/
-.coverage
-coverage.xml
-
-# Distribution
-*.tar.gz
-*.whl
+# Rust
+target/
 
 # Runtime state (never commit user data)
 *.yaml.bak
 *.yaml.tmp
-
-# Rust
-target/
 
 # macOS
 .DS_Store
