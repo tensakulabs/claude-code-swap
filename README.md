@@ -1,5 +1,9 @@
 # claude-code-swap (`ccs`)
 
+[![crates.io](https://img.shields.io/crates/v/claude-code-swap)](https://crates.io/crates/claude-code-swap)
+[![npm](https://img.shields.io/npm/v/@tensakulabs/ccs)](https://www.npmjs.com/package/@tensakulabs/ccs)
+[![CI](https://github.com/tensakulabs/claude-code-swap/actions/workflows/rust.yml/badge.svg)](https://github.com/tensakulabs/claude-code-swap/actions/workflows/rust.yml)
+
 > Switch Claude Code provider profiles with one command.
 
 Claude Code is locked to Anthropic models by default. `ccs` (Claude Code Switch) lets you manage multiple provider profiles — Ollama, OpenRouter, Gemini, OpenAI, or any OpenAI-compatible endpoint — and launch Claude Code with the right environment variables in a single command.
