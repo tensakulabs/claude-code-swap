@@ -1,6 +1,5 @@
 # claude-code-swap (`ccs`)
 
-[![crates.io](https://img.shields.io/crates/v/claude-code-swap)](https://crates.io/crates/claude-code-swap)
 [![npm](https://img.shields.io/npm/v/@tensakulabs/ccs)](https://www.npmjs.com/package/@tensakulabs/ccs)
 [![CI](https://github.com/tensakulabs/claude-code-swap/actions/workflows/rust.yml/badge.svg)](https://github.com/tensakulabs/claude-code-swap/actions/workflows/rust.yml)
 
@@ -15,10 +14,7 @@ Claude Code is locked to Anthropic models by default. `ccs` (Claude Code Switch)
 ## Install
 
 ```bash
-# Cargo (recommended):
-cargo install claude-code-swap
-
-# Homebrew:
+# Homebrew (recommended):
 brew install tensakulabs/tap/claude-code-swap
 
 # npm (shim — requires the binary on PATH):
