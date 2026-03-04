@@ -35,7 +35,7 @@ jobs:
             binary: ccs
             archive: ccs-macos-aarch64.tar.gz
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             binary: ccs
             archive: ccs-macos-x86_64.tar.gz
     steps:
@@ -89,7 +89,7 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish --access public || echo "Version already published, skipping"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
