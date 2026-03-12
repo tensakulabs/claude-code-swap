@@ -1,12 +1,21 @@
-# Python source — not needed in npm package
-src/
-tests/
-pyproject.toml
-install.sh
+# Rust/Cargo source — not needed in npm package
+crates/
+target/
+Cargo.toml
+Cargo.lock
+rust-toolchain.toml
+
+# Native binaries — downloaded at install time, never published
+bin/ccs
+bin/ccs.exe
+bin/_ccs_install.tar.gz
+
+# CI / dev
+.github/
+.git/
+.gitignore
 *.py
 *.pyc
 __pycache__/
 *.egg-info/
-dist/
-.github/
-.gitignore
+install.sh

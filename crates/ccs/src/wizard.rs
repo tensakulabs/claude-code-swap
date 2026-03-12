@@ -4,9 +4,47 @@ use dialoguer::{Confirm, Input, Select};
 
 use crate::config::{config_file, ensure_config_dir, load_config, save_config, Models, Profile};
 use crate::error::CcsError;
-use crate::presets::{get_preset, PRESET_NAMES};
+use crate::launcher::find_claude_binary;
+use crate::presets::{get_model_suggestions, get_preset, get_token_hint, TierSuggestions, PRESET_NAMES};
 use crate::profiles::add_profile;
 use crate::state::set_active_profile;
+
+/// Free-text model prompt with a pre-filled default.
+fn prompt_model_free(label: &str, default: &str) -> String {
+    Input::new()
+        .with_prompt(label)
+        .default(default.to_string())
+        .interact_text()
+        .unwrap_or_default()
+}
+
+/// Select a model from a suggestion list.
+/// Shows suggestions first, then a "custom…" option for free-text entry.
+/// Falls back to the preset default if the current default isn't in the list.
+fn prompt_model_select(label: &str, tier: &TierSuggestions, current: Option<&str>) -> String {
+    const CUSTOM_OPT: &str = "custom…";
+
+    let mut items: Vec<&str> = tier.models.to_vec();
+    items.push(CUSTOM_OPT);
+
+    // Try to pre-select the current default in the list.
+    let default_idx = current
+        .and_then(|cur| items.iter().position(|&m| m == cur))
+        .unwrap_or(0);
+
+    let idx = Select::new()
+        .with_prompt(label)
+        .items(&items)
+        .default(default_idx)
+        .interact()
+        .unwrap_or(0);
+
+    if items[idx] == CUSTOM_OPT {
+        prompt_model_free(&format!("{label} (enter model name)"), current.unwrap_or(""))
+    } else {
+        items[idx].to_string()
+    }
+}
 
 /// Interactive first-time setup wizard.
 pub fn run_wizard() -> Result<(), CcsError> {
@@ -31,9 +69,9 @@ pub fn run_wizard() -> Result<(), CcsError> {
     }
 
     // Check for claude binary
-    match which::which("claude") {
-        Ok(path) => println!("Found Claude Code at: {}\n", path.display()),
-        Err(_) => println!("Warning: Claude Code not found in PATH.\n"),
+    match find_claude_binary() {
+        Ok(path) => println!("Found Claude Code at: {path}\n"),
+        Err(_) => println!("Warning: Claude Code not found in PATH or common install locations.\n"),
     }
 
     let mut config = if cfg_path.exists() {
@@ -87,48 +125,14 @@ pub fn run_wizard() -> Result<(), CcsError> {
                 profile_data.base_url = Some(base_url);
 
                 let models = profile_data.models.clone().unwrap_or_default();
-                let haiku: String = Input::new()
-                    .with_prompt("Haiku model")
-                    .default(models.haiku.unwrap_or_default())
-                    .interact_text()
-                    .unwrap_or_default();
-                let sonnet: String = Input::new()
-                    .with_prompt("Sonnet model")
-                    .default(models.sonnet.unwrap_or_default())
-                    .interact_text()
-                    .unwrap_or_default();
-                let opus: String = Input::new()
-                    .with_prompt("Opus model")
-                    .default(models.opus.unwrap_or_default())
-                    .interact_text()
-                    .unwrap_or_default();
+                let haiku = prompt_model_free("Haiku model", models.haiku.as_deref().unwrap_or(""));
+                let sonnet = prompt_model_free("Sonnet model", models.sonnet.as_deref().unwrap_or(""));
+                let opus = prompt_model_free("Opus model", models.opus.as_deref().unwrap_or(""));
                 profile_data.models = Some(Models {
                     haiku: if haiku.is_empty() { None } else { Some(haiku) },
-                    sonnet: if sonnet.is_empty() {
-                        None
-                    } else {
-                        Some(sonnet)
-                    },
+                    sonnet: if sonnet.is_empty() { None } else { Some(sonnet) },
                     opus: if opus.is_empty() { None } else { Some(opus) },
                 });
-            }
-            "openrouter" | "gemini" | "openai" => {
-                let env_var_hint = match provider_type {
-                    "openrouter" => "OPENROUTER_API_KEY",
-                    "gemini" => "GEMINI_API_KEY",
-                    "openai" => "OPENAI_API_KEY",
-                    _ => "API_KEY",
-                };
-                println!(
-                    "API key reference (use ${{ENV_VAR}} or press Enter for ${{{}}})",
-                    env_var_hint
-                );
-                let key_input: String = Input::new()
-                    .with_prompt("API key env var")
-                    .default(format!("${{{env_var_hint}}}"))
-                    .interact_text()
-                    .unwrap_or_default();
-                profile_data.auth_token = Some(key_input);
             }
             "custom" => {
                 let base_url: String = Input::new()
@@ -150,34 +154,69 @@ pub fn run_wizard() -> Result<(), CcsError> {
                     .interact()
                     .unwrap_or(false);
                 if has_models {
-                    let h: String = Input::new()
-                        .with_prompt("Haiku model (or Enter to skip)")
-                        .default(String::new())
-                        .interact_text()
-                        .unwrap_or_default();
-                    let s: String = Input::new()
-                        .with_prompt("Sonnet model (or Enter to skip)")
-                        .default(String::new())
-                        .interact_text()
-                        .unwrap_or_default();
-                    let o: String = Input::new()
-                        .with_prompt("Opus model (or Enter to skip)")
-                        .default(String::new())
-                        .interact_text()
-                        .unwrap_or_default();
+                    let h = prompt_model_free("Haiku model (or Enter to skip)", "");
+                    let s = prompt_model_free("Sonnet model (or Enter to skip)", "");
+                    let o = prompt_model_free("Opus model (or Enter to skip)", "");
                     let haiku = if h.is_empty() { None } else { Some(h) };
                     let sonnet = if s.is_empty() { None } else { Some(s) };
                     let opus = if o.is_empty() { None } else { Some(o) };
                     if haiku.is_some() || sonnet.is_some() || opus.is_some() {
-                        profile_data.models = Some(Models {
-                            haiku,
-                            sonnet,
-                            opus,
-                        });
+                        profile_data.models = Some(Models { haiku, sonnet, opus });
                     }
                 }
             }
-            _ => {}
+            _ => {
+                // API-key providers: prompt for the key, then optionally let the user
+                // pick models from the suggestion list.
+                let default_token = profile_data
+                    .auth_token
+                    .clone()
+                    .unwrap_or_else(|| "${API_KEY}".into());
+                if let Some((env_var, url)) = get_token_hint(provider_type) {
+                    println!("  Get your API key: {url}");
+                    println!("  Set it as: export {env_var}=<your-key>");
+                    println!("  Or enter the key directly below (not recommended).");
+                }
+                let key_input: String = Input::new()
+                    .with_prompt("Auth token (env var ref or raw key)")
+                    .default(default_token)
+                    .interact_text()
+                    .unwrap_or_default();
+                profile_data.auth_token = Some(key_input);
+
+                if let Some(suggestions) = get_model_suggestions(provider_type) {
+                    if suggestions.has_choices() {
+                        let customize = Confirm::new()
+                            .with_prompt("Customize models? (Enter to keep defaults)")
+                            .default(false)
+                            .interact()
+                            .unwrap_or(false);
+                        if customize {
+                            let models = profile_data.models.clone().unwrap_or_default();
+                            let haiku = prompt_model_select(
+                                "Haiku (fast) model",
+                                &suggestions.haiku,
+                                models.haiku.as_deref(),
+                            );
+                            let sonnet = prompt_model_select(
+                                "Sonnet (mid) model",
+                                &suggestions.sonnet,
+                                models.sonnet.as_deref(),
+                            );
+                            let opus = prompt_model_select(
+                                "Opus (best) model",
+                                &suggestions.opus,
+                                models.opus.as_deref(),
+                            );
+                            profile_data.models = Some(Models {
+                                haiku: Some(haiku),
+                                sonnet: Some(sonnet),
+                                opus: Some(opus),
+                            });
+                        }
+                    }
+                }
+            }
         }
 
         config = add_profile(&config, &name, profile_data);
