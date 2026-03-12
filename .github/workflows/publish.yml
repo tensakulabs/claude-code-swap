@@ -71,7 +71,7 @@ jobs:
 
   publish-npm:
     name: Publish to npm
-    needs: test
+    needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

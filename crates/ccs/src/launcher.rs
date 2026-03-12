@@ -7,25 +7,68 @@ use crate::error::CcsError;
 ///
 /// Search order:
 ///   1. CLAUDE_BINARY env var (for testing/overrides)
-///   2. `which` lookup
-///   3. Error with install hint
+///   2. `which` lookup (uses current PATH)
+///   3. Common npm/node install fallback paths
+///   4. Error with install hint
 pub fn find_claude_binary() -> Result<String, CcsError> {
     if let Ok(override_path) = std::env::var("CLAUDE_BINARY") {
         return Ok(override_path);
     }
-    match which::which("claude") {
-        Ok(path) => Ok(path.to_string_lossy().to_string()),
-        Err(_) => Err(CcsError::BinaryNotFound),
+    if let Ok(path) = which::which("claude") {
+        return Ok(path.to_string_lossy().to_string());
     }
+    // PATH may be incomplete (e.g., nvm not sourced, non-login shell).
+    // Check common npm/node install locations before giving up.
+    let home = std::env::var("HOME").unwrap_or_default();
+    let candidates: &[String] = &[
+        "/usr/local/bin/claude".to_string(),
+        "/opt/homebrew/bin/claude".to_string(),
+        format!("{home}/.npm/bin/claude"),
+        format!("{home}/.npm-global/bin/claude"),
+        format!("{home}/.local/bin/claude"),
+        "/usr/bin/claude".to_string(),
+    ];
+    for path_str in candidates {
+        let p = std::path::Path::new(path_str.as_str());
+        if p.exists() {
+            return Ok(path_str.clone());
+        }
+    }
+    Err(CcsError::BinaryNotFound)
 }
+
+/// ANTHROPIC_* keys that ccs manages. These are always stripped from the
+/// inherited shell environment before launching, then re-applied from the
+/// active profile. This prevents shell-level vars from bleeding through
+/// when the `default` profile (or any profile without that key) is active.
+const MANAGED_ENV_KEYS: &[&str] = &[
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+];
 
 /// Build the full environment for exec.
 ///
-/// Starts with current env, overlays ANTHROPIC_* vars from profile.
+/// Strips all managed ANTHROPIC_* vars from the inherited shell environment,
+/// then re-applies only what the active profile explicitly sets.
+///
+/// This ensures `default` profile truly means "Anthropic subscription" even
+/// if the user has ANTHROPIC_BASE_URL set in their shell.
 pub fn build_env(resolved_profile: &Profile) -> BTreeMap<String, String> {
     let mut env: BTreeMap<String, String> = std::env::vars().collect();
+
+    // Strip managed keys — profile values (or absence) take full ownership.
+    for key in MANAGED_ENV_KEYS {
+        env.remove(*key);
+    }
+
+    // Re-apply only what the active profile explicitly sets.
     let overrides = build_env_overrides(resolved_profile);
     env.extend(overrides);
+
     env
 }
 
@@ -100,5 +143,41 @@ mod tests {
         let env = build_env(&Profile::default());
         // Should still have standard env vars
         assert!(env.contains_key("HOME") || env.contains_key("PATH"));
+    }
+
+    #[test]
+    fn test_build_env_default_strips_shell_anthropic_vars() {
+        // Simulate a user who has ANTHROPIC_BASE_URL set in their shell.
+        std::env::set_var("ANTHROPIC_BASE_URL", "http://ollama.local/v1");
+        std::env::set_var("ANTHROPIC_AUTH_TOKEN", "shell-token");
+
+        // With default (empty) profile, those vars must NOT survive.
+        let env = build_env(&Profile::default());
+        assert!(
+            !env.contains_key("ANTHROPIC_BASE_URL"),
+            "default profile must strip shell ANTHROPIC_BASE_URL"
+        );
+        assert!(
+            !env.contains_key("ANTHROPIC_AUTH_TOKEN"),
+            "default profile must strip shell ANTHROPIC_AUTH_TOKEN"
+        );
+
+        std::env::remove_var("ANTHROPIC_BASE_URL");
+        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+    }
+
+    #[test]
+    fn test_build_env_profile_overrides_shell_vars() {
+        // Shell has one base URL; profile specifies a different one.
+        std::env::set_var("ANTHROPIC_BASE_URL", "http://shell.local/v1");
+
+        let profile = Profile {
+            base_url: Some("http://profile.local/v1".into()),
+            ..Default::default()
+        };
+        let env = build_env(&profile);
+        assert_eq!(env["ANTHROPIC_BASE_URL"], "http://profile.local/v1");
+
+        std::env::remove_var("ANTHROPIC_BASE_URL");
     }
 }
