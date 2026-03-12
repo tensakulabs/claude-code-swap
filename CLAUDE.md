@@ -1,5 +1,18 @@
 # claude-code-swap (ccs) — Developer Notes
 
+## OpenAI preset vs Codex CLI
+
+The `openai` preset in ccs points to `https://api.openai.com/v1` — the standard OpenAI Chat Completions API — and requires an `OPENAI_API_KEY` from platform.openai.com.
+
+**This is NOT the same as Codex CLI.** Codex CLI (`codex` binary) uses:
+- Endpoint: `https://chatgpt.com/backend-api/codex/responses`
+- Auth: OAuth stored in `~/.codex/auth.json` (not an API key)
+- Protocol: OpenAI Responses API + proprietary `ChatGPT-Account-ID` header
+
+Codex CLI auth cannot be used with ccs's `openai` preset. See the OAuth section below for the proxy workaround.
+
+---
+
 ## Known Limitations / Future Work
 
 ### OAuth-based providers (Codex, GitHub Copilot)
