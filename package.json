@@ -1,15 +1,21 @@
 {
   "name": "@tensakulabs/ccs",
   "version": "0.3.0",
-  "description": "Switch Claude Code provider profiles with one command (Ollama, OpenRouter, Gemini, OpenAI)",
+  "description": "Switch Claude Code provider profiles with one command.",
   "keywords": [
     "claude",
     "claude-code",
     "anthropic",
     "llm",
     "provider",
+    "model-switching",
     "ollama",
     "openrouter",
+    "gemini",
+    "openai",
+    "kimi",
+    "minimax",
+    "alibaba",
     "cli"
   ],
   "homepage": "https://github.com/tensakulabs/claude-code-swap",
