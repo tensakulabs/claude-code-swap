@@ -15,9 +15,7 @@ pub struct ModelSuggestions {
 impl ModelSuggestions {
     /// Returns true if any tier has more than one suggestion (i.e. worth showing a picker).
     pub fn has_choices(&self) -> bool {
-        self.haiku.models.len() > 1
-            || self.sonnet.models.len() > 1
-            || self.opus.models.len() > 1
+        self.haiku.models.len() > 1 || self.sonnet.models.len() > 1 || self.opus.models.len() > 1
     }
 }
 
@@ -94,7 +92,10 @@ pub fn get_preset(name: &str) -> Profile {
                 let mut m = std::collections::BTreeMap::new();
                 m.insert("ANTHROPIC_MODEL".into(), "MiniMax-M2.5".into());
                 m.insert("ANTHROPIC_SMALL_FAST_MODEL".into(), "MiniMax-M2.5".into());
-                m.insert("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into());
+                m.insert(
+                    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(),
+                    "1".into(),
+                );
                 m.insert("API_TIMEOUT_MS".into(), "3000000".into());
                 m
             }),
@@ -115,7 +116,10 @@ pub fn get_preset(name: &str) -> Profile {
                 let mut m = std::collections::BTreeMap::new();
                 m.insert("ANTHROPIC_MODEL".into(), "kimi-k2.5".into());
                 m.insert("ANTHROPIC_SMALL_FAST_MODEL".into(), "kimi-k2.5".into());
-                m.insert("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into());
+                m.insert(
+                    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(),
+                    "1".into(),
+                );
                 m.insert("API_TIMEOUT_MS".into(), "600000".into());
                 m
             }),
@@ -296,7 +300,10 @@ mod tests {
         for name in PRESET_NAMES {
             let preset = get_preset(name);
             if *name != "custom" {
-                assert!(preset.base_url.is_some(), "preset '{name}' missing base_url");
+                assert!(
+                    preset.base_url.is_some(),
+                    "preset '{name}' missing base_url"
+                );
             }
         }
     }
@@ -352,7 +359,10 @@ mod tests {
         assert_eq!(p.auth_token.as_deref(), Some("${OPENROUTER_API_KEY}"));
         assert_eq!(models(&p).haiku.as_deref(), Some("qwen/qwen3-4b:free"));
         assert_eq!(models(&p).sonnet.as_deref(), Some("qwen/qwen3-coder:free"));
-        assert_eq!(models(&p).opus.as_deref(), Some("deepseek/deepseek-r1-0528:free"));
+        assert_eq!(
+            models(&p).opus.as_deref(),
+            Some("deepseek/deepseek-r1-0528:free")
+        );
     }
 
     #[test]
@@ -381,35 +391,53 @@ mod tests {
     #[test]
     fn test_minimax_preset() {
         let p = get_preset("minimax");
-        assert_eq!(p.base_url.as_deref(), Some("https://api.minimax.io/anthropic"));
+        assert_eq!(
+            p.base_url.as_deref(),
+            Some("https://api.minimax.io/anthropic")
+        );
         assert_eq!(p.auth_token.as_deref(), Some("${MINIMAX_API_KEY}"));
         assert_eq!(models(&p).haiku.as_deref(), Some("MiniMax-M2.5"));
         assert_eq!(models(&p).sonnet.as_deref(), Some("MiniMax-M2.5"));
         assert_eq!(models(&p).opus.as_deref(), Some("MiniMax-M2.5"));
         assert_eq!(env_val(&p, "ANTHROPIC_MODEL"), Some("MiniMax-M2.5"));
-        assert_eq!(env_val(&p, "ANTHROPIC_SMALL_FAST_MODEL"), Some("MiniMax-M2.5"));
-        assert_eq!(env_val(&p, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"), Some("1"));
+        assert_eq!(
+            env_val(&p, "ANTHROPIC_SMALL_FAST_MODEL"),
+            Some("MiniMax-M2.5")
+        );
+        assert_eq!(
+            env_val(&p, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"),
+            Some("1")
+        );
         assert_eq!(env_val(&p, "API_TIMEOUT_MS"), Some("3000000"));
     }
 
     #[test]
     fn test_kimi_preset() {
         let p = get_preset("kimi");
-        assert_eq!(p.base_url.as_deref(), Some("https://api.moonshot.ai/anthropic"));
+        assert_eq!(
+            p.base_url.as_deref(),
+            Some("https://api.moonshot.ai/anthropic")
+        );
         assert_eq!(p.auth_token.as_deref(), Some("${MOONSHOT_API_KEY}"));
         assert_eq!(models(&p).haiku.as_deref(), Some("kimi-k2.5"));
         assert_eq!(models(&p).sonnet.as_deref(), Some("kimi-k2.5"));
         assert_eq!(models(&p).opus.as_deref(), Some("kimi-k2.5"));
         assert_eq!(env_val(&p, "ANTHROPIC_MODEL"), Some("kimi-k2.5"));
         assert_eq!(env_val(&p, "ANTHROPIC_SMALL_FAST_MODEL"), Some("kimi-k2.5"));
-        assert_eq!(env_val(&p, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"), Some("1"));
+        assert_eq!(
+            env_val(&p, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"),
+            Some("1")
+        );
         assert_eq!(env_val(&p, "API_TIMEOUT_MS"), Some("600000"));
     }
 
     #[test]
     fn test_zai_preset() {
         let p = get_preset("zai");
-        assert_eq!(p.base_url.as_deref(), Some("https://api.z.ai/api/anthropic"));
+        assert_eq!(
+            p.base_url.as_deref(),
+            Some("https://api.z.ai/api/anthropic")
+        );
         assert_eq!(p.auth_token.as_deref(), Some("${ZAI_API_KEY}"));
         assert_eq!(models(&p).haiku.as_deref(), Some("GLM-4.5-Air"));
         assert_eq!(models(&p).sonnet.as_deref(), Some("GLM-4.7"));
@@ -429,7 +457,10 @@ mod tests {
         assert_eq!(models(&p).sonnet.as_deref(), Some("kimi-k2.5"));
         assert_eq!(models(&p).opus.as_deref(), Some("glm-5"));
         assert_eq!(env_val(&p, "ANTHROPIC_MODEL"), Some("kimi-k2.5"));
-        assert_eq!(env_val(&p, "ANTHROPIC_SMALL_FAST_MODEL"), Some("qwen3.5-plus"));
+        assert_eq!(
+            env_val(&p, "ANTHROPIC_SMALL_FAST_MODEL"),
+            Some("qwen3.5-plus")
+        );
     }
 
     // ── description coverage ─────────────────────────────────────────────────
@@ -438,7 +469,10 @@ mod tests {
     fn test_all_preset_names_have_description() {
         for name in PRESET_NAMES {
             let desc = get_preset_description(name);
-            assert_ne!(desc, "Unknown provider", "preset '{name}' has no description");
+            assert_ne!(
+                desc, "Unknown provider",
+                "preset '{name}' has no description"
+            );
         }
     }
 }

@@ -597,10 +597,7 @@ fn auto_init() -> Result<(), CcsError> {
         eprintln!("ccs: run 'ccs use default' to switch to Anthropic subscription.");
     } else {
         save_config(&base_config)?;
-        eprintln!(
-            "ccs: initialized config at {}",
-            config_path.display()
-        );
+        eprintln!("ccs: initialized config at {}", config_path.display());
     }
 
     Ok(())
@@ -763,7 +760,11 @@ mod tests {
     #[test]
     fn test_capture_env_profile_model_only() {
         let _g = ENV_LOCK.lock().unwrap();
-        for key in &["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"] {
+        for key in &[
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+        ] {
             std::env::remove_var(key);
         }
         std::env::set_var("ANTHROPIC_DEFAULT_SONNET_MODEL", "my-sonnet");
@@ -823,7 +824,10 @@ mod tests {
         auto_init().unwrap();
         let after = std::fs::metadata(&config_path).unwrap().modified().unwrap();
 
-        assert_eq!(before, after, "auto_init must not overwrite existing config");
+        assert_eq!(
+            before, after,
+            "auto_init must not overwrite existing config"
+        );
         std::env::remove_var("CCS_CONFIG_DIR");
     }
 
