@@ -93,3 +93,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  homebrew-bump:
+    name: Bump Homebrew formula
+    needs: release
+    uses: tensakulabs/.github/.github/workflows/homebrew-bump.yml@main
+    with:
+      formula_name: claude-code-swap
+      repo: tensakulabs/claude-code-swap
+      version: ${{ github.ref_name }}   # shared workflow strips leading 'v'
+      archives: '["ccs-macos-aarch64.tar.gz","ccs-macos-x86_64.tar.gz","ccs-linux-x86_64.tar.gz"]'
+    secrets:
+      tap_token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
