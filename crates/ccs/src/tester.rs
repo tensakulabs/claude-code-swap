@@ -54,6 +54,12 @@ fn make_request(url: &str, token: Option<&str>, timeout_secs: u64) -> TestResult
     }
 }
 
+/// Returns true if this base_url points to an Anthropic-compatible endpoint.
+/// Heuristic: the URL path contains "anthropic".
+fn is_anthropic_compat(base_url: &str) -> bool {
+    base_url.contains("/anthropic")
+}
+
 /// Test connectivity for a profile. Prints results to stdout.
 pub fn test_profile(profile_name: &str, profile: &Profile) {
     println!("Testing \"{profile_name}\" profile...");
@@ -84,25 +90,86 @@ pub fn test_profile(profile_name: &str, profile: &Profile) {
         return;
     }
 
-    // Test base URL reachability via /models endpoint
-    let models_url = format!("{base_url}/models");
-    let result = make_request(&models_url, auth_token, 10);
+    let anthropic_compat = is_anthropic_compat(base_url);
 
-    if result.ok {
-        println!(
-            "  Base URL:  {base_url}  {} ({}ms)",
-            color::green("reachable"),
-            result.elapsed_ms.unwrap_or(0)
-        );
+    // Reachability probe: Anthropic uses POST /v1/messages; OpenAI uses GET /models.
+    let reach_ok;
+    let reach_elapsed;
+    if anthropic_compat {
+        let probe_url = format!("{base_url}/v1/messages");
+        let body = anthropic_json_mini("MiniMax-M2.5"); // model doesn't matter for probe
+        let mut req = ureq::post(&probe_url)
+            .set("Content-Type", "application/json")
+            .set("anthropic-version", "2023-06-01");
+        if let Some(t) = auth_token {
+            req = req.set("Authorization", &format!("Bearer {t}"));
+        }
+        req = req.timeout(std::time::Duration::from_secs(10));
+        let start = Instant::now();
+        let (ok, msg, elapsed) = match req.send_string(&body) {
+            Ok(r) => (
+                true,
+                format!("HTTP {}", r.status()),
+                start.elapsed().as_millis() as u64,
+            ),
+            Err(ureq::Error::Status(c, _)) if c == 401 || c == 403 => (
+                true,
+                format!("HTTP {c} (auth issue — server reachable)"),
+                start.elapsed().as_millis() as u64,
+            ),
+            // 400 = server understood the request (bad body is fine for a probe)
+            Err(ureq::Error::Status(c, _)) if c == 400 => (
+                true,
+                format!("HTTP {c} (server reachable)"),
+                start.elapsed().as_millis() as u64,
+            ),
+            Err(ureq::Error::Status(c, _)) => (
+                false,
+                format!("HTTP {c}"),
+                start.elapsed().as_millis() as u64,
+            ),
+            Err(e) => (
+                false,
+                format!("Connection failed: {e}"),
+                start.elapsed().as_millis() as u64,
+            ),
+        };
+        reach_ok = ok;
+        reach_elapsed = elapsed;
+        if ok {
+            println!(
+                "  Base URL:  {base_url}  {} ({reach_elapsed}ms)",
+                color::green("reachable")
+            );
+        } else {
+            println!(
+                "  Base URL:  {base_url}  {} — {msg}",
+                color::red("unreachable")
+            );
+            println!("  Skipping model tests (base URL unreachable)");
+            return;
+        }
     } else {
-        println!(
-            "  Base URL:  {base_url}  {} — {}",
-            color::red("unreachable"),
-            result.message
-        );
-        println!("  Skipping model tests (base URL unreachable)");
-        return;
+        let models_url = format!("{base_url}/models");
+        let result = make_request(&models_url, auth_token, 10);
+        reach_ok = result.ok;
+        reach_elapsed = result.elapsed_ms.unwrap_or(0);
+        if result.ok {
+            println!(
+                "  Base URL:  {base_url}  {} ({reach_elapsed}ms)",
+                color::green("reachable")
+            );
+        } else {
+            println!(
+                "  Base URL:  {base_url}  {} — {}",
+                color::red("unreachable"),
+                result.message
+            );
+            println!("  Skipping model tests (base URL unreachable)");
+            return;
+        }
     }
+    let _ = reach_ok;
 
     let models = resolved.models.as_ref();
     let mut all_ok = true;
@@ -119,18 +186,32 @@ pub fn test_profile(profile_name: &str, profile: &Profile) {
             None => continue,
         };
 
-        let model_url = format!("{base_url}/chat/completions");
-        let body = serde_json_mini(model_id);
-
-        let mut req = ureq::post(&model_url).set("Content-Type", "application/json");
-        if let Some(t) = auth_token {
-            req = req.set("Authorization", &format!("Bearer {t}"));
-        }
-        req = req.timeout(std::time::Duration::from_secs(15));
-
-        let start = Instant::now();
         let role_cap = capitalize(role);
-        match req.send_string(&body) {
+        let start = Instant::now();
+
+        let send_result = if anthropic_compat {
+            let url = format!("{base_url}/v1/messages");
+            let body = anthropic_json_mini(model_id);
+            let mut req = ureq::post(&url)
+                .set("Content-Type", "application/json")
+                .set("anthropic-version", "2023-06-01");
+            if let Some(t) = auth_token {
+                req = req.set("Authorization", &format!("Bearer {t}"));
+            }
+            req.timeout(std::time::Duration::from_secs(30))
+                .send_string(&body)
+        } else {
+            let url = format!("{base_url}/chat/completions");
+            let body = openai_json_mini(model_id);
+            let mut req = ureq::post(&url).set("Content-Type", "application/json");
+            if let Some(t) = auth_token {
+                req = req.set("Authorization", &format!("Bearer {t}"));
+            }
+            req.timeout(std::time::Duration::from_secs(15))
+                .send_string(&body)
+        };
+
+        match send_result {
             Ok(_) => {
                 let elapsed = start.elapsed().as_millis();
                 println!(
@@ -142,21 +223,12 @@ pub fn test_profile(profile_name: &str, profile: &Profile) {
             }
             Err(ureq::Error::Status(code, _)) => {
                 all_ok = false;
-                if code == 404 {
-                    println!(
-                        "  {:<8} {:<40} {}",
-                        role_cap,
-                        model_id,
-                        color::red("404 model not found")
-                    );
+                let label = if code == 404 {
+                    color::red("404 model not found")
                 } else {
-                    println!(
-                        "  {:<8} {:<40} {}",
-                        role_cap,
-                        model_id,
-                        color::red(&format!("HTTP {code}"))
-                    );
-                }
+                    color::red(&format!("HTTP {code}"))
+                };
+                println!("  {:<8} {:<40} {}", role_cap, model_id, label);
             }
             Err(e) => {
                 all_ok = false;
@@ -180,8 +252,16 @@ pub fn test_profile(profile_name: &str, profile: &Profile) {
     }
 }
 
-/// Build a minimal JSON body for chat/completions test.
-fn serde_json_mini(model: &str) -> String {
+/// Build a minimal JSON body for Anthropic /v1/messages test.
+fn anthropic_json_mini(model: &str) -> String {
+    format!(
+        r#"{{"model":"{}","max_tokens":1,"messages":[{{"role":"user","content":"hi"}}]}}"#,
+        model.replace('"', "\\\"")
+    )
+}
+
+/// Build a minimal JSON body for OpenAI /chat/completions test.
+fn openai_json_mini(model: &str) -> String {
     format!(
         r#"{{"model":"{}","messages":[{{"role":"user","content":"hi"}}],"max_tokens":1}}"#,
         model.replace('"', "\\\"")
