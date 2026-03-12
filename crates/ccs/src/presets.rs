@@ -173,7 +173,7 @@ pub fn get_preset_description(name: &str) -> &'static str {
         "ollama" => "Local Ollama instance (no API key needed)",
         "openrouter" => "OpenRouter (set OPENROUTER_API_KEY)",
         "gemini" => "Google Gemini via OpenAI-compat endpoint (set GEMINI_API_KEY)",
-        "openai" => "OpenAI direct (set OPENAI_API_KEY)",
+        "openai" => "OpenAI API (api.openai.com — NOT Codex CLI; set OPENAI_API_KEY)",
         "minimax" => "MiniMax M2.5 via Anthropic-compat endpoint (set MINIMAX_API_KEY)",
         "kimi" => "Kimi K2.5 / Moonshot AI via Anthropic-compat endpoint (set MOONSHOT_API_KEY)",
         "zai" => "Z.ai / Zhipu GLM (set ZAI_API_KEY)",
@@ -189,7 +189,7 @@ pub fn get_token_hint(name: &str) -> Option<(&'static str, &'static str)> {
     match name {
         "openrouter" => Some(("OPENROUTER_API_KEY", "https://openrouter.ai/settings/keys")),
         "gemini" => Some(("GEMINI_API_KEY", "https://aistudio.google.com/apikey")),
-        "openai" => Some(("OPENAI_API_KEY", "https://platform.openai.com/api-keys — already use Codex CLI or other OpenAI tools? Your OPENAI_API_KEY is already set, just press Enter")),
+        "openai" => Some(("OPENAI_API_KEY", "https://platform.openai.com/api-keys\n  NOTE: This uses api.openai.com (standard OpenAI API), NOT Codex CLI.\n  Codex CLI uses OAuth and a different endpoint — see CLAUDE.md for details.")),
         "minimax" => Some(("MINIMAX_API_KEY", "https://platform.minimax.io/user-center/basic-information/interface-key")),
         "kimi" => Some(("MOONSHOT_API_KEY", "https://platform.moonshot.ai/console/api-keys")),
         "zai" => Some(("ZAI_API_KEY", "https://openplatform.z.ai/api-keys")),
