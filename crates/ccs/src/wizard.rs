@@ -5,7 +5,9 @@ use dialoguer::{Confirm, Input, Select};
 use crate::config::{config_file, ensure_config_dir, load_config, save_config, Models, Profile};
 use crate::error::CcsError;
 use crate::launcher::find_claude_binary;
-use crate::presets::{get_model_suggestions, get_preset, get_token_hint, TierSuggestions, PRESET_NAMES};
+use crate::presets::{
+    get_model_suggestions, get_preset, get_token_hint, TierSuggestions, PRESET_NAMES,
+};
 use crate::profiles::add_profile;
 use crate::state::set_active_profile;
 
@@ -40,7 +42,10 @@ fn prompt_model_select(label: &str, tier: &TierSuggestions, current: Option<&str
         .unwrap_or(0);
 
     if items[idx] == CUSTOM_OPT {
-        prompt_model_free(&format!("{label} (enter model name)"), current.unwrap_or(""))
+        prompt_model_free(
+            &format!("{label} (enter model name)"),
+            current.unwrap_or(""),
+        )
     } else {
         items[idx].to_string()
     }
@@ -126,11 +131,16 @@ pub fn run_wizard() -> Result<(), CcsError> {
 
                 let models = profile_data.models.clone().unwrap_or_default();
                 let haiku = prompt_model_free("Haiku model", models.haiku.as_deref().unwrap_or(""));
-                let sonnet = prompt_model_free("Sonnet model", models.sonnet.as_deref().unwrap_or(""));
+                let sonnet =
+                    prompt_model_free("Sonnet model", models.sonnet.as_deref().unwrap_or(""));
                 let opus = prompt_model_free("Opus model", models.opus.as_deref().unwrap_or(""));
                 profile_data.models = Some(Models {
                     haiku: if haiku.is_empty() { None } else { Some(haiku) },
-                    sonnet: if sonnet.is_empty() { None } else { Some(sonnet) },
+                    sonnet: if sonnet.is_empty() {
+                        None
+                    } else {
+                        Some(sonnet)
+                    },
                     opus: if opus.is_empty() { None } else { Some(opus) },
                 });
             }
@@ -161,7 +171,11 @@ pub fn run_wizard() -> Result<(), CcsError> {
                     let sonnet = if s.is_empty() { None } else { Some(s) };
                     let opus = if o.is_empty() { None } else { Some(o) };
                     if haiku.is_some() || sonnet.is_some() || opus.is_some() {
-                        profile_data.models = Some(Models { haiku, sonnet, opus });
+                        profile_data.models = Some(Models {
+                            haiku,
+                            sonnet,
+                            opus,
+                        });
                     }
                 }
             }
