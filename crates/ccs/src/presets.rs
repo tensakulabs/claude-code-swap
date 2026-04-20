@@ -26,7 +26,8 @@ pub const PRESET_NAMES: &[&str] = &[
     "openai",
     "minimax",
     "kimi",
-    "zai",
+    "zai-sota",
+    "zai-stable",
     "alibaba",
     "custom",
 ];
@@ -125,16 +126,33 @@ pub fn get_preset(name: &str) -> Profile {
             }),
             ..Default::default()
         },
-        // Z.ai (Zhipu GLM) — Anthropic-compatible endpoint
+        // Z.ai (Zhipu GLM) SOTA — GLM-5.1 flagship, best for coding and agentic tasks
         // Set ZAI_API_KEY before use.
         // API_TIMEOUT_MS required: GLM models are slow and will time out without it.
-        "zai" => Profile {
+        "zai-sota" => Profile {
             base_url: Some("https://api.z.ai/api/anthropic".into()),
             auth_token: Some("${ZAI_API_KEY}".into()),
             models: Some(Models {
-                haiku: Some("GLM-4.5-Air".into()),
-                sonnet: Some("GLM-4.7".into()),
-                opus: Some("GLM-4.7".into()),
+                haiku: Some("glm-4.5-air".into()),
+                sonnet: Some("glm-5.1".into()),
+                opus: Some("glm-5.1".into()),
+            }),
+            env: Some({
+                let mut m = std::collections::BTreeMap::new();
+                m.insert("API_TIMEOUT_MS".into(), "3000000".into());
+                m
+            }),
+            ..Default::default()
+        },
+        // Z.ai (Zhipu GLM) stable — GLM-4.7, proven and cost-effective
+        // Set ZAI_API_KEY before use.
+        "zai-stable" => Profile {
+            base_url: Some("https://api.z.ai/api/anthropic".into()),
+            auth_token: Some("${ZAI_API_KEY}".into()),
+            models: Some(Models {
+                haiku: Some("glm-4.5-air".into()),
+                sonnet: Some("glm-4.7".into()),
+                opus: Some("glm-5".into()),
             }),
             env: Some({
                 let mut m = std::collections::BTreeMap::new();
@@ -176,7 +194,8 @@ pub fn get_preset_description(name: &str) -> &'static str {
         "openai" => "OpenAI API (api.openai.com — NOT Codex CLI; set OPENAI_API_KEY)",
         "minimax" => "MiniMax M2.5 via Anthropic-compat endpoint (set MINIMAX_API_KEY)",
         "kimi" => "Kimi K2.5 / Moonshot AI via Anthropic-compat endpoint (set MOONSHOT_API_KEY)",
-        "zai" => "Z.ai / Zhipu GLM (set ZAI_API_KEY)",
+        "zai-sota" => "Z.ai GLM-5.1 — flagship SOTA model (set ZAI_API_KEY)",
+        "zai-stable" => "Z.ai GLM-4.7 — stable, cost-effective (set ZAI_API_KEY)",
         "alibaba" => "Alibaba Cloud Qwen via Anthropic-compat endpoint (set ALIBABA_API_KEY)",
         "custom" => "Custom provider — fill in manually",
         _ => "Unknown provider",
@@ -192,7 +211,7 @@ pub fn get_token_hint(name: &str) -> Option<(&'static str, &'static str)> {
         "openai" => Some(("OPENAI_API_KEY", "https://platform.openai.com/api-keys\n  NOTE: This uses api.openai.com (standard OpenAI API), NOT Codex CLI.\n  Codex CLI uses OAuth and a different endpoint — see CLAUDE.md for details.")),
         "minimax" => Some(("MINIMAX_API_KEY", "https://platform.minimax.io/user-center/basic-information/interface-key")),
         "kimi" => Some(("MOONSHOT_API_KEY", "https://platform.moonshot.ai/console/api-keys")),
-        "zai" => Some(("ZAI_API_KEY", "https://openplatform.z.ai/api-keys")),
+        "zai-sota" | "zai-stable" => Some(("ZAI_API_KEY", "https://openplatform.z.ai/api-keys")),
         "alibaba" => Some(("ALIBABA_API_KEY", "https://bailian.console.aliyun.com/ — use the Coding Plan API key (sk-sp-xxxxx)")),
         _ => None,
     }
@@ -248,15 +267,26 @@ pub fn get_model_suggestions(name: &str) -> Option<ModelSuggestions> {
                 models: &["o3", "o4", "gpt-4.1"],
             },
         }),
-        "zai" => Some(ModelSuggestions {
+        "zai-sota" => Some(ModelSuggestions {
             haiku: TierSuggestions {
-                models: &["GLM-4.5-Air"],
+                models: &["glm-4.5-air"],
             },
             sonnet: TierSuggestions {
-                models: &["GLM-4.7"],
+                models: &["glm-5.1", "glm-5"],
             },
             opus: TierSuggestions {
-                models: &["GLM-4.7", "glm-5"],
+                models: &["glm-5.1", "glm-5"],
+            },
+        }),
+        "zai-stable" => Some(ModelSuggestions {
+            haiku: TierSuggestions {
+                models: &["glm-4.5-air", "glm-4.6"],
+            },
+            sonnet: TierSuggestions {
+                models: &["glm-4.7", "glm-5"],
+            },
+            opus: TierSuggestions {
+                models: &["glm-5", "glm-4.7"],
             },
         }),
         "alibaba" => Some(ModelSuggestions {
@@ -432,16 +462,30 @@ mod tests {
     }
 
     #[test]
-    fn test_zai_preset() {
-        let p = get_preset("zai");
+    fn test_zai_sota_preset() {
+        let p = get_preset("zai-sota");
         assert_eq!(
             p.base_url.as_deref(),
             Some("https://api.z.ai/api/anthropic")
         );
         assert_eq!(p.auth_token.as_deref(), Some("${ZAI_API_KEY}"));
-        assert_eq!(models(&p).haiku.as_deref(), Some("GLM-4.5-Air"));
-        assert_eq!(models(&p).sonnet.as_deref(), Some("GLM-4.7"));
-        assert_eq!(models(&p).opus.as_deref(), Some("GLM-4.7"));
+        assert_eq!(models(&p).haiku.as_deref(), Some("glm-4.5-air"));
+        assert_eq!(models(&p).sonnet.as_deref(), Some("glm-5.1"));
+        assert_eq!(models(&p).opus.as_deref(), Some("glm-5.1"));
+        assert_eq!(env_val(&p, "API_TIMEOUT_MS"), Some("3000000"));
+    }
+
+    #[test]
+    fn test_zai_stable_preset() {
+        let p = get_preset("zai-stable");
+        assert_eq!(
+            p.base_url.as_deref(),
+            Some("https://api.z.ai/api/anthropic")
+        );
+        assert_eq!(p.auth_token.as_deref(), Some("${ZAI_API_KEY}"));
+        assert_eq!(models(&p).haiku.as_deref(), Some("glm-4.5-air"));
+        assert_eq!(models(&p).sonnet.as_deref(), Some("glm-4.7"));
+        assert_eq!(models(&p).opus.as_deref(), Some("glm-5"));
         assert_eq!(env_val(&p, "API_TIMEOUT_MS"), Some("3000000"));
     }
 
