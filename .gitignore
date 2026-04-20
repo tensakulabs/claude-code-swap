@@ -14,3 +14,9 @@ target/
 *.swp
 *.swo
 *~
+
+# Node
+node_modules/
+
+# Built binary
+bin/ccs

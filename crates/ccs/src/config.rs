@@ -26,9 +26,26 @@ pub fn config_file() -> PathBuf {
     config_dir().join("config.yaml")
 }
 
+/// Returns the path to the profiles directory.
+pub fn profiles_dir() -> PathBuf {
+    config_dir().join("profiles")
+}
+
 /// Create the config directory with mode 0700.
 pub fn ensure_config_dir() -> Result<(), CcsError> {
     let dir = config_dir();
+    if !dir.exists() {
+        fs::create_dir_all(&dir)?;
+        #[cfg(unix)]
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+/// Create the profiles directory with mode 0700.
+pub fn ensure_profiles_dir() -> Result<(), CcsError> {
+    ensure_config_dir()?;
+    let dir = profiles_dir();
     if !dir.exists() {
         fs::create_dir_all(&dir)?;
         #[cfg(unix)]
@@ -78,17 +95,68 @@ pub struct Models {
 // Config I/O
 // ---------------------------------------------------------------------------
 
-/// Load config.yaml. Returns empty Config if missing or empty.
+/// Load profiles from individual `profiles/*.yaml` files.
+/// Each file is a bare Profile (no wrapper). Filename stem = profile name.
+pub fn load_profile_files() -> Result<BTreeMap<String, Profile>, CcsError> {
+    let dir = profiles_dir();
+    let mut profiles = BTreeMap::new();
+    if !dir.exists() {
+        return Ok(profiles);
+    }
+    let mut entries: Vec<_> = fs::read_dir(&dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map_or(false, |ext| ext == "yaml" || ext == "yml")
+        })
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let content = fs::read_to_string(&path)?;
+        if content.trim().is_empty() {
+            continue;
+        }
+        let profile: Profile = serde_yaml::from_str(&content).map_err(|e| {
+            CcsError::Config(format!("Failed to parse profiles/{}.yaml: {e}", name))
+        })?;
+        profiles.insert(name, profile);
+    }
+    Ok(profiles)
+}
+
+/// Load config from both config.yaml (legacy) and profiles/*.yaml.
+/// Profile files take precedence on name conflicts.
 pub fn load_config() -> Result<Config, CcsError> {
-    let path = config_file();
-    if !path.exists() {
-        return Ok(Config::default());
-    }
-    let content = fs::read_to_string(&path)?;
-    if content.trim().is_empty() {
-        return Ok(Config::default());
-    }
-    let config: Config = serde_yaml::from_str(&content)?;
+    // Load legacy config.yaml
+    let mut config = {
+        let path = config_file();
+        if !path.exists() {
+            Config::default()
+        } else {
+            let content = fs::read_to_string(&path)?;
+            if content.trim().is_empty() {
+                Config::default()
+            } else {
+                serde_yaml::from_str(&content)?
+            }
+        }
+    };
+
+    // Overlay individual profile files (take precedence)
+    let file_profiles = load_profile_files()?;
+    config.profiles.extend(file_profiles);
+
     Ok(config)
 }
 
@@ -110,6 +178,58 @@ pub fn save_config_to(config: &Config, path: &Path) -> Result<(), CcsError> {
     fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
     fs::rename(&tmp, path)?;
     Ok(())
+}
+
+/// Save a single profile to `profiles/{name}.yaml` with mode 0600.
+pub fn save_profile(name: &str, profile: &Profile) -> Result<(), CcsError> {
+    ensure_profiles_dir()?;
+    let path = profiles_dir().join(format!("{name}.yaml"));
+    let content = serde_yaml::to_string(profile)?;
+    let tmp = path.with_extension("yaml.tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(content.as_bytes())?;
+    }
+    #[cfg(unix)]
+    fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
+    fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// Delete `profiles/{name}.yaml`. No error if the file doesn't exist.
+pub fn delete_profile_file(name: &str) -> Result<(), CcsError> {
+    let path = profiles_dir().join(format!("{name}.yaml"));
+    if path.exists() {
+        fs::remove_file(&path)?;
+    }
+    Ok(())
+}
+
+/// Migrate config.yaml profiles into individual `profiles/*.yaml` files,
+/// then remove config.yaml.
+pub fn migrate_config() -> Result<usize, CcsError> {
+    let cfg_path = config_file();
+    if !cfg_path.exists() {
+        return Err(CcsError::Config(
+            "No config.yaml found — nothing to migrate".into(),
+        ));
+    }
+
+    let content = fs::read_to_string(&cfg_path)?;
+    if content.trim().is_empty() {
+        fs::remove_file(&cfg_path)?;
+        return Ok(0);
+    }
+
+    let config: Config = serde_yaml::from_str(&content)?;
+    let count = config.profiles.len();
+
+    for (name, profile) in &config.profiles {
+        save_profile(name, profile)?;
+    }
+
+    fs::remove_file(&cfg_path)?;
+    Ok(count)
 }
 
 // ---------------------------------------------------------------------------
@@ -268,9 +388,11 @@ fn scan_for_keys(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ENV_LOCK;
 
     #[test]
     fn test_load_config_missing_file() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         let config = load_config().unwrap();
@@ -280,6 +402,7 @@ mod tests {
 
     #[test]
     fn test_load_config_empty_file() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("config.yaml"), "").unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
@@ -290,6 +413,7 @@ mod tests {
 
     #[test]
     fn test_load_config_valid_yaml() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.yaml"),
@@ -390,6 +514,7 @@ mod tests {
 
     #[test]
     fn test_save_config_round_trip() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         let mut profiles = BTreeMap::new();
@@ -416,6 +541,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_save_config_permissions() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         let config = Config::default();
@@ -458,5 +584,222 @@ mod tests {
         assert_eq!(resolved.auth_token.as_deref(), Some("key-abc"));
         assert_eq!(resolved.base_url.as_deref(), Some("https://openrouter.ai"));
         std::env::remove_var("CCS_OR_KEY");
+    }
+
+    // ── profile files ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_save_and_load_profile_file() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        let profile = Profile {
+            base_url: Some("http://localhost:11434/v1".into()),
+            auth_token: Some("ollama".into()),
+            ..Default::default()
+        };
+        save_profile("ollama", &profile).unwrap();
+
+        assert!(dir.path().join("profiles/ollama.yaml").exists());
+
+        let loaded = load_profile_files().unwrap();
+        assert_eq!(
+            loaded["ollama"].base_url.as_deref(),
+            Some("http://localhost:11434/v1")
+        );
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_load_profile_files_empty_dir() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        fs::create_dir_all(dir.path().join("profiles")).unwrap();
+
+        let loaded = load_profile_files().unwrap();
+        assert!(loaded.is_empty());
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_load_profile_files_no_dir() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+
+        let loaded = load_profile_files().unwrap();
+        assert!(loaded.is_empty());
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_delete_profile_file() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        let profile = Profile {
+            base_url: Some("http://x".into()),
+            ..Default::default()
+        };
+        save_profile("test", &profile).unwrap();
+        assert!(dir.path().join("profiles/test.yaml").exists());
+
+        delete_profile_file("test").unwrap();
+        assert!(!dir.path().join("profiles/test.yaml").exists());
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_delete_profile_file_nonexistent() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        // Should not error
+        delete_profile_file("nope").unwrap();
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_load_config_merges_both_sources() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+
+        // Write legacy config.yaml with one profile
+        let mut profiles = BTreeMap::new();
+        profiles.insert(
+            "legacy".into(),
+            Profile {
+                base_url: Some("http://legacy".into()),
+                ..Default::default()
+            },
+        );
+        let config = Config { profiles };
+        let path = dir.path().join("config.yaml");
+        save_config_to(&config, &path).unwrap();
+
+        // Write a profile file
+        let profile = Profile {
+            base_url: Some("http://new".into()),
+            ..Default::default()
+        };
+        save_profile("new-profile", &profile).unwrap();
+
+        let loaded = load_config().unwrap();
+        assert_eq!(
+            loaded.profiles["legacy"].base_url.as_deref(),
+            Some("http://legacy")
+        );
+        assert_eq!(
+            loaded.profiles["new-profile"].base_url.as_deref(),
+            Some("http://new")
+        );
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_load_config_profile_file_wins_on_conflict() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+
+        // Write legacy config.yaml
+        let mut profiles = BTreeMap::new();
+        profiles.insert(
+            "shared".into(),
+            Profile {
+                base_url: Some("http://old".into()),
+                ..Default::default()
+            },
+        );
+        let config = Config { profiles };
+        save_config_to(&config, &dir.path().join("config.yaml")).unwrap();
+
+        // Write profile file with same name
+        save_profile(
+            "shared",
+            &Profile {
+                base_url: Some("http://new".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let loaded = load_config().unwrap();
+        assert_eq!(
+            loaded.profiles["shared"].base_url.as_deref(),
+            Some("http://new"),
+            "profile file should take precedence over config.yaml"
+        );
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_migrate_config() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+
+        // Write config.yaml with two profiles
+        let mut profiles = BTreeMap::new();
+        profiles.insert(
+            "alpha".into(),
+            Profile {
+                base_url: Some("http://alpha".into()),
+                ..Default::default()
+            },
+        );
+        profiles.insert(
+            "beta".into(),
+            Profile {
+                base_url: Some("http://beta".into()),
+                ..Default::default()
+            },
+        );
+        let config = Config { profiles };
+        save_config_to(&config, &dir.path().join("config.yaml")).unwrap();
+
+        let count = migrate_config().unwrap();
+        assert_eq!(count, 2);
+        assert!(!dir.path().join("config.yaml").exists());
+        assert!(dir.path().join("profiles/alpha.yaml").exists());
+        assert!(dir.path().join("profiles/beta.yaml").exists());
+
+        // Verify they load correctly
+        let loaded = load_config().unwrap();
+        assert_eq!(
+            loaded.profiles["alpha"].base_url.as_deref(),
+            Some("http://alpha")
+        );
+        assert_eq!(
+            loaded.profiles["beta"].base_url.as_deref(),
+            Some("http://beta")
+        );
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_migrate_config_no_file() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        let result = migrate_config();
+        assert!(result.is_err());
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_save_profile_permissions() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        save_profile("test", &Profile::default()).unwrap();
+
+        let path = dir.path().join("profiles/test.yaml");
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        std::env::remove_var("CCS_CONFIG_DIR");
     }
 }

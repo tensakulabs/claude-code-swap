@@ -104,7 +104,7 @@ profiles:
       opus: llama3.1:70b
 
   openrouter:
-    base_url: https://openrouter.ai/api/v1
+    base_url: https://openrouter.ai/api
     auth_token: ${OPENROUTER_API_KEY}   # resolved from your shell env at launch
     api_key: ""
     models:
@@ -155,7 +155,7 @@ The `default` profile sets none of these — Claude Code runs with your existing
 | Preset | Base URL |
 |---|---|
 | `ollama` | `http://localhost:11434/v1` |
-| `openrouter` | `https://openrouter.ai/api/v1` |
+| `openrouter` | `https://openrouter.ai/api` |
 | `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | `openai` | `https://api.openai.com/v1` |
 | `custom` | (you provide) |

@@ -4,12 +4,15 @@ use std::process;
 use clap::{Parser, Subcommand};
 
 use crate::color;
-use crate::config::{config_file, load_config, save_config, warn_hardcoded_keys, Config, Profile};
+use crate::config::{
+    config_file, delete_profile_file, load_config, migrate_config, profiles_dir, save_profile,
+    warn_hardcoded_keys, Config, Profile,
+};
 use crate::doctor::run_doctor;
 use crate::error::CcsError;
 use crate::launcher::launch;
 use crate::presets::PRESET_NAMES;
-use crate::profiles::{add_profile, get_profile, list_profiles, remove_profile};
+use crate::profiles::{get_profile, list_profiles, remove_profile};
 use crate::state::{get_active_profile, set_active_profile};
 use crate::tester::test_profile;
 use crate::wizard::run_wizard;
@@ -81,7 +84,7 @@ pub enum Command {
     /// Interactive first-time setup wizard
     Init,
 
-    /// Open config.yaml in $EDITOR
+    /// Open profiles directory (or config.yaml) in $EDITOR
     Config,
 }
 
@@ -123,6 +126,9 @@ pub enum ProfileCommand {
         /// Profile name to save as
         name: String,
     },
+
+    /// Migrate config.yaml into individual profiles/*.yaml files
+    Migrate,
 }
 
 // ---------------------------------------------------------------------------
@@ -293,8 +299,7 @@ fn cmd_profile_add(config: &Config, name: &str, preset: Option<&str>) -> Result<
 
     if let Some(preset_name) = preset {
         let data = crate::presets::get_preset(preset_name);
-        let new_config = add_profile(config, name, data);
-        save_config(&new_config)?;
+        save_profile(name, &data)?;
         println!("Profile \"{name}\" added from preset \"{preset_name}\".");
         println!("Edit it with: ccs profile edit {name}");
     } else {
@@ -336,8 +341,7 @@ fn cmd_profile_add(config: &Config, name: &str, preset: Option<&str>) -> Result<
         let profile_data: Profile = serde_yaml::from_str(&content)
             .map_err(|e| CcsError::Config(format!("Failed to parse profile: {e}")))?;
 
-        let new_config = add_profile(config, name, profile_data);
-        save_config(&new_config)?;
+        save_profile(name, &profile_data)?;
         println!("Profile \"{name}\" added.");
     }
     Ok(())
@@ -378,8 +382,7 @@ fn cmd_profile_edit(config: &Config, name: &str) -> Result<(), CcsError> {
         let content = std::fs::read_to_string(&tmp_path)?;
         match serde_yaml::from_str::<Profile>(&content) {
             Ok(new_data) => {
-                let new_config = add_profile(config, name, new_data);
-                save_config(&new_config)?;
+                save_profile(name, &new_data)?;
                 println!("Profile \"{name}\" updated.");
                 return Ok(());
             }
@@ -427,8 +430,16 @@ fn cmd_profile_remove(config: &Config, name: &str) -> Result<(), CcsError> {
         }
     }
 
-    let new_config = remove_profile(config, name)?;
-    save_config(&new_config)?;
+    // Remove from profiles/ dir
+    delete_profile_file(name)?;
+    // Also remove from legacy config.yaml if present
+    if config.profiles.contains_key(name) {
+        let new_config = remove_profile(config, name)?;
+        let cfg_path = config_file();
+        if cfg_path.exists() {
+            crate::config::save_config(&new_config)?;
+        }
+    }
     println!("Profile \"{name}\" removed.");
     Ok(())
 }
@@ -495,8 +506,7 @@ fn cmd_profile_capture(config: &Config, name: &str) -> Result<(), CcsError> {
         }
     }
 
-    let new_config = add_profile(config, name, profile);
-    save_config(&new_config)?;
+    save_profile(name, &profile)?;
 
     println!("\nProfile \"{name}\" saved.");
     println!("Switch back to Anthropic default with: ccs use default");
@@ -505,19 +515,29 @@ fn cmd_profile_capture(config: &Config, name: &str) -> Result<(), CcsError> {
 }
 
 fn cmd_config_open() -> Result<(), CcsError> {
-    let path = config_file();
-    if !path.exists() {
+    let prof_dir = profiles_dir();
+    let legacy_path = config_file();
+
+    // Prefer profiles/ dir, fall back to config.yaml
+    let target = if prof_dir.exists()
+        && std::fs::read_dir(&prof_dir)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false)
+    {
+        prof_dir
+    } else if legacy_path.exists() {
+        legacy_path
+    } else {
         println!(
-            "Config file not found at {}. Run 'ccs init' first.",
-            path.display()
+            "No config found. Run 'ccs init' first."
         );
         return Ok(());
-    }
+    };
 
     let editor = std::env::var("VISUAL")
         .or_else(|_| std::env::var("EDITOR"))
         .unwrap_or_else(|_| "vi".into());
-    let status = process::Command::new(&editor).arg(&path).status()?;
+    let status = process::Command::new(&editor).arg(&target).status()?;
     if !status.success() {
         color::err_msg("Editor exited with error");
     }
@@ -570,36 +590,48 @@ fn capture_env_profile() -> Option<Profile> {
 /// and sets it as active so the user's existing setup keeps working.
 fn auto_init() -> Result<(), CcsError> {
     let config_path = config_file();
-    if config_path.exists() {
+    let prof_dir = profiles_dir();
+
+    // Already initialized if either config.yaml or profiles/ exists
+    if config_path.exists() || prof_dir.exists() {
         return Ok(());
     }
 
-    use crate::config::{ensure_config_dir, Config};
-    use crate::profiles::add_profile;
+    use crate::config::ensure_profiles_dir;
     use crate::state::set_active_profile;
-    use std::collections::BTreeMap;
 
-    ensure_config_dir()?;
-
-    let base_config = Config {
-        profiles: BTreeMap::new(),
-    };
+    ensure_profiles_dir()?;
 
     if let Some(captured) = capture_env_profile() {
-        // User already has overrides — preserve them as "captured" profile
-        let config = add_profile(&base_config, "captured", captured);
-        save_config(&config)?;
+        save_profile("captured", &captured)?;
         set_active_profile("captured")?;
         eprintln!(
-            "ccs: initialized config at {} (your ANTHROPIC_* overrides saved as 'captured' profile)",
-            config_path.display()
+            "ccs: initialized profiles at {} (your ANTHROPIC_* overrides saved as 'captured' profile)",
+            prof_dir.display()
         );
         eprintln!("ccs: run 'ccs use default' to switch to Anthropic subscription.");
     } else {
-        save_config(&base_config)?;
-        eprintln!("ccs: initialized config at {}", config_path.display());
+        eprintln!("ccs: initialized profiles at {}", prof_dir.display());
     }
 
+    Ok(())
+}
+
+fn cmd_profile_migrate() -> Result<(), CcsError> {
+    let cfg_path = config_file();
+    if !cfg_path.exists() {
+        println!("No config.yaml found — already using profile files.");
+        let dir = profiles_dir();
+        if dir.exists() {
+            println!("Profiles directory: {}", dir.display());
+        }
+        return Ok(());
+    }
+
+    let count = migrate_config()?;
+    let dir = profiles_dir();
+    println!("Migrated {count} profile(s) to {}", dir.display());
+    println!("Removed config.yaml");
     Ok(())
 }
 
@@ -655,6 +687,7 @@ pub fn run() -> Result<(), CcsError> {
                 Some(ProfileCommand::Edit { name }) => cmd_profile_edit(&config, &name),
                 Some(ProfileCommand::Remove { name }) => cmd_profile_remove(&config, &name),
                 Some(ProfileCommand::Capture { name }) => cmd_profile_capture(&config, &name),
+                Some(ProfileCommand::Migrate) => cmd_profile_migrate(),
             }
         }
         Some(Command::Test { profile }) => cmd_test(profile.as_deref()),
@@ -674,18 +707,13 @@ pub fn run() -> Result<(), CcsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    /// Serialise all tests that touch process-level env vars.
-    /// Rust runs tests in parallel by default; env vars are process-global, so
-    /// tests that mutate ANTHROPIC_* or CCS_CONFIG_DIR must not run concurrently.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::ENV_LOCK;
 
     // ── capture_env_profile ────────────────────────────────────────────────
 
     #[test]
     fn test_capture_env_profile_empty_when_no_vars() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Ensure none of the managed vars are set.
         for key in &[
             "ANTHROPIC_BASE_URL",
@@ -705,7 +733,7 @@ mod tests {
 
     #[test]
     fn test_capture_env_profile_captures_base_url() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("ANTHROPIC_BASE_URL", "http://ollama.local/v1");
         // Clear others to avoid interference.
         for key in &[
@@ -728,7 +756,7 @@ mod tests {
 
     #[test]
     fn test_capture_env_profile_captures_all_fields() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("ANTHROPIC_BASE_URL", "http://openrouter.ai/v1");
         std::env::set_var("ANTHROPIC_AUTH_TOKEN", "tok-abc");
         std::env::set_var("ANTHROPIC_API_KEY", "key-xyz");
@@ -759,7 +787,7 @@ mod tests {
 
     #[test]
     fn test_capture_env_profile_model_only() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for key in &[
             "ANTHROPIC_BASE_URL",
             "ANTHROPIC_AUTH_TOKEN",
@@ -784,8 +812,8 @@ mod tests {
     // ── auto_init ─────────────────────────────────────────────────────────
 
     #[test]
-    fn test_auto_init_creates_config_when_missing() {
-        let _g = ENV_LOCK.lock().unwrap();
+    fn test_auto_init_creates_profiles_dir_when_missing() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         // Clear ANTHROPIC vars so no captured profile is created.
@@ -803,37 +831,60 @@ mod tests {
         auto_init().unwrap();
 
         assert!(
-            dir.path().join("config.yaml").exists(),
-            "config.yaml should be created by auto_init"
+            dir.path().join("profiles").exists(),
+            "profiles/ should be created by auto_init"
         );
         std::env::remove_var("CCS_CONFIG_DIR");
     }
 
     #[test]
     fn test_auto_init_skips_when_config_exists() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.yaml");
         std::fs::write(&config_path, "profiles: {}\n").unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
 
-        // Modify the file so we can detect if auto_init touched it.
-        let before = std::fs::metadata(&config_path).unwrap().modified().unwrap();
-        // Small sleep to ensure mtime would differ if written.
-        std::thread::sleep(std::time::Duration::from_millis(10));
         auto_init().unwrap();
-        let after = std::fs::metadata(&config_path).unwrap().modified().unwrap();
 
-        assert_eq!(
-            before, after,
-            "auto_init must not overwrite existing config"
+        // Should not create profiles/ dir since config.yaml already exists
+        assert!(
+            !dir.path().join("profiles").exists(),
+            "auto_init must not create profiles/ when config.yaml exists"
+        );
+        std::env::remove_var("CCS_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_auto_init_skips_when_profiles_dir_exists() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("profiles")).unwrap();
+        std::env::set_var("CCS_CONFIG_DIR", dir.path());
+        for key in &[
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+            "ANTHROPIC_DEFAULT_SONNET_MODEL",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        ] {
+            std::env::remove_var(key);
+        }
+
+        auto_init().unwrap();
+
+        // Should not create config.yaml
+        assert!(
+            !dir.path().join("config.yaml").exists(),
+            "auto_init must not create config.yaml when profiles/ exists"
         );
         std::env::remove_var("CCS_CONFIG_DIR");
     }
 
     #[test]
     fn test_auto_init_captures_env_vars_as_captured_profile() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         std::env::set_var("ANTHROPIC_BASE_URL", "http://ollama.local/v1");
@@ -849,11 +900,11 @@ mod tests {
 
         auto_init().unwrap();
 
-        let config = load_config().unwrap();
         assert!(
-            config.profiles.contains_key("captured"),
-            "auto_init should create 'captured' profile when ANTHROPIC_* vars are set"
+            dir.path().join("profiles/captured.yaml").exists(),
+            "auto_init should create profiles/captured.yaml when ANTHROPIC_* vars are set"
         );
+        let config = load_config().unwrap();
         assert_eq!(
             config.profiles["captured"].base_url.as_deref(),
             Some("http://ollama.local/v1")
@@ -865,7 +916,7 @@ mod tests {
 
     #[test]
     fn test_auto_init_no_captured_profile_without_env_vars() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         for key in &[

@@ -45,7 +45,7 @@ pub fn get_preset(name: &str) -> Profile {
             ..Default::default()
         },
         "openrouter" => Profile {
-            base_url: Some("https://openrouter.ai/api/v1".into()),
+            base_url: Some("https://openrouter.ai/api".into()),
             auth_token: Some("${OPENROUTER_API_KEY}".into()),
             api_key: Some(String::new()),
             models: Some(Models {
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn test_openrouter_preset() {
         let p = get_preset("openrouter");
-        assert_eq!(p.base_url.as_deref(), Some("https://openrouter.ai/api/v1"));
+        assert_eq!(p.base_url.as_deref(), Some("https://openrouter.ai/api"));
         assert_eq!(p.auth_token.as_deref(), Some("${OPENROUTER_API_KEY}"));
         assert_eq!(models(&p).haiku.as_deref(), Some("qwen/qwen3-4b:free"));
         assert_eq!(models(&p).sonnet.as_deref(), Some("qwen/qwen3-coder:free"));

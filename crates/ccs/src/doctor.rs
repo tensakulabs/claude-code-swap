@@ -3,7 +3,7 @@ use std::fs;
 use regex::Regex;
 
 use crate::color;
-use crate::config::{config_dir, config_file, load_config};
+use crate::config::{config_dir, config_file, load_config, profiles_dir};
 use crate::launcher::find_claude_binary;
 use crate::state::get_active_profile;
 use crate::VERSION;
@@ -38,42 +38,71 @@ pub fn check_claude_binary() -> CheckResult {
 }
 
 pub fn check_config_exists() -> CheckResult {
-    let path = config_file();
-    if path.exists() {
+    let prof_dir = profiles_dir();
+    let has_profiles = prof_dir.exists()
+        && fs::read_dir(&prof_dir)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false);
+    let legacy_path = config_file();
+
+    if has_profiles && legacy_path.exists() {
         CheckResult {
-            name: "config.yaml".into(),
+            name: "Config".into(),
+            status: CheckStatus::Warn,
+            message: format!(
+                "Both profiles/ and config.yaml exist. Run 'ccs profile migrate' to consolidate."
+            ),
+        }
+    } else if has_profiles {
+        CheckResult {
+            name: "Config".into(),
             status: CheckStatus::Ok,
-            message: path.display().to_string(),
+            message: prof_dir.display().to_string(),
+        }
+    } else if legacy_path.exists() {
+        CheckResult {
+            name: "Config".into(),
+            status: CheckStatus::Ok,
+            message: format!(
+                "{} (legacy — run 'ccs profile migrate')",
+                legacy_path.display()
+            ),
         }
     } else {
         CheckResult {
-            name: "config.yaml".into(),
+            name: "Config".into(),
             status: CheckStatus::Warn,
-            message: format!("Not found at {}. Run 'ccs init'.", path.display()),
+            message: "Not found. Run 'ccs init'.".into(),
         }
     }
 }
 
 pub fn check_config_parseable() -> CheckResult {
     let path = config_file();
-    if !path.exists() {
+    let prof_dir = profiles_dir();
+    let has_any = path.exists()
+        || (prof_dir.exists()
+            && fs::read_dir(&prof_dir)
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false));
+    if !has_any {
         return CheckResult {
-            name: "config.yaml (parse)".into(),
+            name: "Config (parse)".into(),
             status: CheckStatus::Warn,
-            message: "File not found — skipping parse check".into(),
+            message: "No config found — skipping parse check".into(),
         };
     }
     match load_config() {
         Ok(config) => {
             let count = config.profiles.len();
             CheckResult {
-                name: "config.yaml (parse)".into(),
+                name: "Config (parse)".into(),
                 status: CheckStatus::Ok,
                 message: format!("Valid YAML, {count} profile(s)"),
             }
         }
         Err(e) => CheckResult {
-            name: "config.yaml (parse)".into(),
+            name: "Config (parse)".into(),
             status: CheckStatus::Fail,
             message: format!("Invalid YAML: {e}"),
         },
@@ -134,8 +163,14 @@ pub fn check_config_dir_permissions() -> CheckResult {
 pub fn check_active_profile_valid() -> CheckResult {
     let active = get_active_profile();
     let path = config_file();
+    let prof_dir = profiles_dir();
+    let has_any = path.exists()
+        || (prof_dir.exists()
+            && fs::read_dir(&prof_dir)
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false));
 
-    if !path.exists() {
+    if !has_any {
         if active == "default" {
             return CheckResult {
                 name: "Active profile".into(),
@@ -146,7 +181,7 @@ pub fn check_active_profile_valid() -> CheckResult {
         return CheckResult {
             name: "Active profile".into(),
             status: CheckStatus::Warn,
-            message: format!("'{active}' (no config file)"),
+            message: format!("'{active}' (no config)"),
         };
     }
 
@@ -176,7 +211,13 @@ pub fn check_active_profile_valid() -> CheckResult {
 
 pub fn check_env_refs_resolvable() -> CheckResult {
     let path = config_file();
-    if !path.exists() {
+    let prof_dir = profiles_dir();
+    let has_any = path.exists()
+        || (prof_dir.exists()
+            && fs::read_dir(&prof_dir)
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false));
+    if !has_any {
         return CheckResult {
             name: "Env var refs (active)".into(),
             status: CheckStatus::Warn,

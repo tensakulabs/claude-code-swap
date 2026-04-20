@@ -61,9 +61,11 @@ pub fn set_active_profile(name: &str) -> Result<(), CcsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ENV_LOCK;
 
     #[test]
     fn test_get_active_profile_default_when_missing() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         assert_eq!(get_active_profile(), "default");
@@ -72,6 +74,7 @@ mod tests {
 
     #[test]
     fn test_get_active_profile_reads_stored() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("state.yaml"), "active: ollama\n").unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
@@ -81,6 +84,7 @@ mod tests {
 
     #[test]
     fn test_get_active_profile_fallback_on_corrupt() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("state.yaml"), ": bad yaml [").unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
@@ -90,6 +94,7 @@ mod tests {
 
     #[test]
     fn test_get_active_profile_fallback_on_empty() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("state.yaml"), "").unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
@@ -99,6 +104,7 @@ mod tests {
 
     #[test]
     fn test_set_active_profile_writes() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         set_active_profile("openrouter").unwrap();
@@ -109,6 +115,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_set_active_profile_permissions() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         set_active_profile("ollama").unwrap();
@@ -120,6 +127,7 @@ mod tests {
 
     #[test]
     fn test_set_active_profile_no_tmp_remains() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         set_active_profile("gemini").unwrap();
@@ -130,6 +138,7 @@ mod tests {
 
     #[test]
     fn test_set_active_profile_overwrites() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CCS_CONFIG_DIR", dir.path());
         set_active_profile("ollama").unwrap();

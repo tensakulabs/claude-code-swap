@@ -2,13 +2,14 @@ use std::io::IsTerminal;
 
 use dialoguer::{Confirm, Input, Select};
 
-use crate::config::{config_file, ensure_config_dir, load_config, save_config, Models, Profile};
+use crate::config::{
+    config_file, ensure_profiles_dir, load_config, profiles_dir, save_profile, Models,
+};
 use crate::error::CcsError;
 use crate::launcher::find_claude_binary;
 use crate::presets::{
     get_model_suggestions, get_preset, get_token_hint, TierSuggestions, PRESET_NAMES,
 };
-use crate::profiles::add_profile;
 use crate::state::set_active_profile;
 
 /// Free-text model prompt with a pre-filled default.
@@ -61,7 +62,13 @@ pub fn run_wizard() -> Result<(), CcsError> {
     println!("Welcome to claude-swap!\n");
 
     let cfg_path = config_file();
-    if cfg_path.exists() {
+    let prof_dir = profiles_dir();
+    let has_config = cfg_path.exists()
+        || (prof_dir.exists()
+            && std::fs::read_dir(&prof_dir)
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false));
+    if has_config {
         let reinit = Confirm::new()
             .with_prompt("Config already exists. Reinitialize?")
             .default(false)
@@ -233,7 +240,8 @@ pub fn run_wizard() -> Result<(), CcsError> {
             }
         }
 
-        config = add_profile(&config, &name, profile_data);
+        save_profile(&name, &profile_data)?;
+        config.profiles.insert(name.clone(), profile_data);
         profiles_added.push(name.clone());
         println!("\nProfile \"{name}\" saved.");
 
@@ -245,12 +253,6 @@ pub fn run_wizard() -> Result<(), CcsError> {
         if !another {
             break;
         }
-    }
-
-    if profiles_added.is_empty() && !cfg_path.exists() {
-        config = crate::config::Config {
-            profiles: std::collections::BTreeMap::from([("default".into(), Profile::default())]),
-        };
     }
 
     // Ask for active profile
@@ -278,8 +280,7 @@ pub fn run_wizard() -> Result<(), CcsError> {
         "default".to_string()
     };
 
-    ensure_config_dir()?;
-    save_config(&config)?;
+    ensure_profiles_dir()?;
     set_active_profile(&active)?;
 
     println!("\nSetup complete! Active profile: {active}");

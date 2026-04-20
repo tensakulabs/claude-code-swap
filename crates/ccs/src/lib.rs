@@ -1,5 +1,8 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(test)]
+pub static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub mod cli;
 pub mod color;
 pub mod config;

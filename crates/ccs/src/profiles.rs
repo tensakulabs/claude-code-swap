@@ -69,7 +69,7 @@ mod tests {
         profiles.insert(
             "openrouter".into(),
             Profile {
-                base_url: Some("https://openrouter.ai/api/v1".into()),
+                base_url: Some("https://openrouter.ai/api".into()),
                 auth_token: Some("${OPENROUTER_API_KEY}".into()),
                 ..Default::default()
             },
