@@ -528,9 +528,7 @@ fn cmd_config_open() -> Result<(), CcsError> {
     } else if legacy_path.exists() {
         legacy_path
     } else {
-        println!(
-            "No config found. Run 'ccs init' first."
-        );
+        println!("No config found. Run 'ccs init' first.");
         return Ok(());
     };
 
