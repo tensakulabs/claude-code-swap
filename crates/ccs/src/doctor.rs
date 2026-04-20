@@ -49,9 +49,7 @@ pub fn check_config_exists() -> CheckResult {
         CheckResult {
             name: "Config".into(),
             status: CheckStatus::Warn,
-            message: format!(
-                "Both profiles/ and config.yaml exist. Run 'ccs profile migrate' to consolidate."
-            ),
+            message: "Both profiles/ and config.yaml exist. Run 'ccs profile migrate' to consolidate.".into(),
         }
     } else if has_profiles {
         CheckResult {

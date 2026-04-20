@@ -108,7 +108,7 @@ pub fn load_profile_files() -> Result<BTreeMap<String, Profile>, CcsError> {
         .filter(|e| {
             e.path()
                 .extension()
-                .map_or(false, |ext| ext == "yaml" || ext == "yml")
+                .is_some_and(|ext| ext == "yaml" || ext == "yml")
         })
         .collect();
     entries.sort_by_key(|e| e.file_name());
@@ -356,10 +356,8 @@ fn scan_for_keys(
     warnings: &mut Vec<String>,
 ) {
     match value {
-        serde_yaml::Value::String(s) => {
-            if pattern.is_match(s) {
-                warnings.push(path.to_string());
-            }
+        serde_yaml::Value::String(s) if pattern.is_match(s) => {
+            warnings.push(path.to_string());
         }
         serde_yaml::Value::Mapping(map) => {
             for (k, v) in map {
