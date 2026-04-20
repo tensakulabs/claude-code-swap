@@ -5,6 +5,10 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.4.0) — required for workflow_dispatch"
+        required: true
 
 permissions:
   contents: write
@@ -67,6 +71,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name != 'main' && github.ref_name || inputs.tag }}
           files: "*.tar.gz"
           generate_release_notes: true
 
@@ -101,7 +106,7 @@ jobs:
     with:
       formula_name: claude-code-swap
       repo: tensakulabs/claude-code-swap
-      version: ${{ github.ref_name }}   # shared workflow strips leading 'v'
+      version: ${{ github.ref_name != 'main' && github.ref_name || inputs.tag }}
       archives: '["ccs-macos-aarch64.tar.gz","ccs-macos-x86_64.tar.gz","ccs-linux-x86_64.tar.gz"]'
     secrets:
       tap_token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
